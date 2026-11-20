@@ -14,7 +14,7 @@
 |---|---|---|
 | 화면 | Gradio | `app.py` |
 | 에이전트 루프 | 수업 3장 `run_agent` (async) | `agent/` |
-| LLM | 기본 Ollama `qwen3:8b` (`ChatOllama(..., reasoning=False)`), 선택 Google Gemini 무료 API (`ChatGoogleGenerativeAI`) | `.env`의 `LLM_PROVIDER`로 전환. 3.0절 참고 |
+| LLM | Google Gemini 무료 API (`ChatGoogleGenerativeAI`) | 3.0절 참고 |
 | 플로우 | LangGraph + `InMemorySaver` | `graph/` |
 | RAG | `bge-m3` + FAISS | `rag/` |
 | 측정기 | FastMCP 가상 측정기 서버 | `mcp_server/` |
@@ -60,21 +60,22 @@ health-agent/
 
 #### 3.0 LLM 선택 (`agent/llm.py`)
 
-| | Ollama (기본) | Google Gemini (선택) |
-|---|---|---|
-| 패키지 | `langchain-ollama` | `langchain-google-genai` |
-| 클래스 | `ChatOllama(model=..., reasoning=False)` | `ChatGoogleGenerativeAI(model=GEMINI_MODEL)` |
-| 키 | 없음 | `GOOGLE_API_KEY` (Google AI Studio 무료 발급) |
-| 용도 | **필수 요건 충족·발표 시연** | 개발 중 빠른 반복, 로컬 모델의 도구 선택 품질 비교 |
+| 항목 | 내용 |
+|---|---|
+| 패키지 | `langchain-google-genai` |
+| 클래스 | `ChatGoogleGenerativeAI(model=GEMINI_MODEL)` |
+| 키 | `GOOGLE_API_KEY` (Google AI Studio 무료 발급) |
 
-- 안내서 3쪽 필수 요건: "로컬 LLM — Ollama 모델(EXAONE·Qwen) 실행, 외부 API는 선택이며 성적과 무관". **Gemini만 쓰면 이 항목이 '미흡'** 처리되므로 Ollama 경로는 반드시 동작해야 하고, 시연과 실행 화면 캡처는 Ollama로 한다.
-- 두 클래스 모두 `bind_tools` / `ainvoke` / `ai.tool_calls`를 지원하므로 `run_agent`는 수정하지 않는다. 바뀌는 곳은 `llm.py` 하나.
-- 무료 등급은 분당·일당 요청 한도가 있고, 무료 등급 입력은 Google 제품 개선에 쓰일 수 있다. 가상 데이터만 쓰므로 허용하되 보고서 "보안·윤리·비용" 장에 적는다. 모델 이름과 한도는 발급 시점에 AI Studio에서 확인해 `GEMINI_MODEL`에 넣는다.
-- 인터넷이 끊기면 Gemini는 동작하지 않는다 → 시연 장애 대비로도 Ollama가 기본.
+- `bind_tools` / `ainvoke` / `ai.tool_calls`를 지원하므로 `run_agent` 루프는 수업 구조 그대로. 모델 생성은 `llm.py` 한 곳.
+- 무료 등급은 분당·일당 요청 한도가 있다. 시연 중 한도 초과를 막으려고 시연 직전 반복 테스트를 줄이고, 한도 오류는 문장으로 화면에 표시한다.
+- 무료 등급 입력은 Google 제품 개선에 쓰일 수 있다. 가상 데이터만 쓰므로 허용하되 보고서 "보안·윤리·비용" 장에 적는다.
+- 모델 이름과 한도는 발급 시점에 AI Studio에서 확인해 `GEMINI_MODEL`에 넣는다.
+- 인터넷이 필요하다 → 시연용 휴대폰 핫스팟 예비, 3분 시연 영상 필수.
+- 안내서 3쪽 필수 요건은 "로컬 LLM — Ollama 모델(EXAONE·Qwen) 실행"이다. Gemini만 쓰면 이 항목이 '미흡' 처리될 수 있다 → 교수님께 확인 필요 (기획서 20절).
 
 #### 3.1 대화 노드 (`run_agent`)
 
-수업 3장 구조를 유지하고 모델 부분만 바꾼다. 루프·로그·승인(`NEED_APPROVAL`)·반복 상한(`max_iters`)·대화 기억은 그대로.
+수업 3장 구조를 유지하고 모델 부분만 Gemini로 바꾼다. 루프·로그·승인(`NEED_APPROVAL`)·반복 상한(`max_iters`)·대화 기억은 그대로.
 
 ```python
 ai = await llm_with_tools.ainvoke(messages)
@@ -127,18 +128,15 @@ send_reminder → wait_check(interrupt)
 
 `.env` (커밋 금지, `.env.example`만 저장소에 올림)
 ```
-LLM_PROVIDER=ollama            # ollama | gemini
-OLLAMA_HOST=http://localhost:11434
-LLM_MODEL=qwen3:8b
 GOOGLE_API_KEY=
 GEMINI_MODEL=
 DISCORD_WEBHOOK_PATIENT=
 DISCORD_WEBHOOK_GUARDIAN=
 ```
 
-- 첫날: `ollama pull qwen3:8b` → `ollama show qwen3:8b`의 Capabilities에 `tools` 확인, `num_ctx` 늘리기
+- 첫날: AI Studio에서 키 발급 → 도구 1개를 `bind_tools`로 붙여 `ai.tool_calls`가 나오는지 확인
 - 임베딩 디바이스: Mac `mps`, Windows `cuda`
-- 오프라인 동작: 모델·FAISS 인덱스·가상 데이터 미리 준비
+- 임베딩·FAISS 인덱스·가상 데이터는 로컬에 미리 준비 (LLM 호출만 인터넷 사용)
 
 ---
 
@@ -158,7 +156,7 @@ health-agent/
 ├─ README.md                    # 실행 방법 + 사용 기술 4개
 │
 ├─ agent/
-│  ├─ llm.py                    # LLM_PROVIDER에 따라 ChatOllama / ChatGoogleGenerativeAI 생성
+│  ├─ llm.py                    # ChatGoogleGenerativeAI 생성 (GOOGLE_API_KEY, GEMINI_MODEL)
 │  ├─ run_agent.py              # 수업 3장 루프 (async): tool_calls → ainvoke → ToolMessage
 │  ├─ tool_registry.py          # 로컬 @tool + RAG 도구 + MCP 도구를 한 리스트로, NEED_APPROVAL
 │  ├─ memory.py                 # 대화 기억 (최근 12개)
